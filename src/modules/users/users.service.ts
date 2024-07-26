@@ -46,7 +46,8 @@ export class UsersService {
       .findOne({ email })
       .select('+approveCode')
       .select('+signInCode')
-      .select('+signInCodeTimestamp');
+      .select('+signInCodeTimestamp')
+      .select('+email');
   }
 
   async findByLogin(login: string): Promise<UserDocument> {

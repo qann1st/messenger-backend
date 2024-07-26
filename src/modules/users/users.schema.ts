@@ -25,7 +25,7 @@ export class User {
   @Prop({ maxlength: 32 })
   lastname: string;
   @ApiProperty({ type: String })
-  @Prop({ required: true, unique: true, lowercase: true })
+  @Prop({ required: true, unique: true, lowercase: true, select: false })
   email: string;
   @ApiProperty({ type: String })
   @Prop({ unique: true, lowercase: true })

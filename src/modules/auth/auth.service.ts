@@ -68,10 +68,15 @@ export class AuthService {
     this.transporterService.sendMail({
       to: data.email,
       subject: 'Вход в учетную запись',
-      html: `<p>Ваш код для входа: ${signInCode}</p>`,
+      html: `
+      <div>
+        <p>Ваш код для входа: ${signInCode}</p>
+        <p>Код действителен 15 минут!</p>
+      </div>
+      `,
     });
 
-    await user.updateOne({ signInCode });
+    await user.updateOne({ signInCode, signInCodeTimestamp: Date.now() });
 
     return {
       success: true,
@@ -81,19 +86,24 @@ export class AuthService {
   async signInApproved({ email, approveCode: signInCode }: ApproveDto) {
     const user = await this.usersService.findByEmail(email);
 
-    if (!user) throw new BadRequestException('User does not exist');
-    if (user.signInCode == null)
-      throw new BadRequestException('User have not sign in code');
-    if (user.signInCode !== signInCode)
-      throw new BadRequestException('Wrong code');
-
     const differenceInMilliseconds = Math.abs(
       Date.now() - user.signInCodeTimestamp,
     );
     const differenceInMinutes = differenceInMilliseconds / 1000 / 60;
 
-    if (differenceInMinutes >= 15)
+    if (differenceInMinutes >= 15) {
+      await user.updateOne({
+        $unset: { signInCode, signInCodeTimestamp: null },
+      });
+
       throw new BadRequestException('Code expired');
+    }
+
+    if (!user) throw new BadRequestException('User does not exist');
+    if (user.signInCode == null)
+      throw new BadRequestException('User have not sign in code');
+    if (user.signInCode !== signInCode)
+      throw new BadRequestException('Wrong code');
 
     const payload: Payload = {
       _id: user._id,
