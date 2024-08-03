@@ -80,9 +80,22 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Post('/approve')
   @ApiBearerAuth('Authorization')
-  @ApiOkResponse({ type: Success })
-  approve(@Body(ValidationPipe) data: ApproveDto) {
-    return this.authService.approve(data);
+  @ApiOkResponse({ type: TokensDto })
+  async approve(@Res() res: Response, @Body(ValidationPipe) data: ApproveDto) {
+    const tokens = await this.authService.approve(data);
+
+    res.cookie('rt', tokens.refreshToken, {
+      expires: new Date(Date.now() + 1296000000),
+      httpOnly: true,
+      secure: true,
+    });
+    res.cookie('at', tokens.accessToken, {
+      expires: new Date(Date.now() + 900000),
+      httpOnly: true,
+      secure: true,
+    });
+
+    res.send(tokens);
   }
 
   @UseGuards(RefreshTokenGuard)

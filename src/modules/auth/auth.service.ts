@@ -64,7 +64,6 @@ export class AuthService {
     if (!user) throw new BadRequestException('User does not exist');
 
     const signInCode = Math.floor(100000 + Math.random() * 900000).toString();
-
     this.transporterService.sendMail({
       to: data.email,
       subject: 'Вход в учетную запись',
@@ -75,8 +74,14 @@ export class AuthService {
       </div>
       `,
     });
+    const date = Date.now();
 
-    await user.updateOne({ signInCode, signInCodeTimestamp: Date.now() });
+    await user.updateOne({
+      $set: {
+        signInCode,
+        signInCodeTimestamp: date,
+      },
+    });
 
     return {
       success: true,
@@ -86,9 +91,7 @@ export class AuthService {
   async signInApproved({ email, approveCode: signInCode }: ApproveDto) {
     const user = await this.usersService.findByEmail(email);
 
-    const differenceInMilliseconds = Math.abs(
-      Date.now() - user.signInCodeTimestamp,
-    );
+    const differenceInMilliseconds = Date.now() - user.signInCodeTimestamp;
     const differenceInMinutes = differenceInMilliseconds / 1000 / 60;
 
     if (differenceInMinutes >= 15) {
@@ -106,13 +109,13 @@ export class AuthService {
       throw new BadRequestException('Wrong code');
 
     const payload: Payload = {
-      _id: user._id,
+      _id: user.id,
       email: user.email,
     };
 
     await user.updateOne({ $unset: { signInCode } });
 
-    return await this.updateRefreshToken(user._id, payload);
+    return await this.updateRefreshToken(user.id, payload);
   }
 
   async approve({ approveCode, email }: ApproveDto) {
@@ -125,7 +128,12 @@ export class AuthService {
 
     await user.updateOne({ $unset: { approveCode } });
 
-    return { success: true };
+    const payload: Payload = {
+      _id: user.id,
+      email: user.email,
+    };
+
+    return await this.updateRefreshToken(user.id, payload);
   }
 
   async logout(userId: string, refreshToken: string) {
@@ -147,15 +155,16 @@ export class AuthService {
   async refreshTokens(userId: string, refreshToken: string) {
     const auth = await this.authModel
       .findOne({ user: userId })
-      .populate('user');
+      .populate('user')
+      .exec();
     if (!auth.refreshTokens.includes(refreshToken))
       throw new ForbiddenException('Access Denied');
     const payload: Payload = {
-      _id: auth.user._id,
+      _id: auth.user.id,
       email: auth.user.email,
     };
-    await this.logout(auth.user._id, refreshToken);
-    return await this.updateRefreshToken(auth.user._id, payload);
+    await this.logout(auth.user.id, refreshToken);
+    return await this.updateRefreshToken(auth.user.id, payload);
   }
 
   async hashData(data: string) {
