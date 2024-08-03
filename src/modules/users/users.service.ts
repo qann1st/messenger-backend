@@ -16,29 +16,91 @@ export class UsersService {
   }
 
   async searchUser(
+    userId: string,
     searchTerm: string,
-    page: number = 1,
-    limit: number = 10,
+    // page: number = 1,
+    // limit: number = 30,
   ): Promise<{ data: User[]; total: number }> {
     if (!searchTerm) throw new BadRequestException('Search term is required');
 
-    const skip = (page - 1) * limit;
     const query = {
       username: new RegExp(searchTerm, 'i'),
       firstname: new RegExp(searchTerm, 'i'),
       lastname: new RegExp(searchTerm, 'i'),
     };
+    const usersByUsername = await this.userModel
+      .find({
+        username: query.username,
+      })
+      .lean();
+    const usersByFirstname = await this.userModel
+      .find({
+        firstname: query.firstname,
+      })
+      .lean();
+    const usersByLastname = await this.userModel
+      .find({
+        lastname: query.lastname,
+      })
+      .lean();
 
-    const [data, total] = await Promise.all([
-      this.userModel.find(query).skip(skip).limit(limit).exec(),
-      this.userModel.countDocuments(query).exec(),
-    ]);
+    const arr = [...usersByUsername, ...usersByFirstname, ...usersByLastname];
+    const seen = new Set();
+    const data = arr.filter((obj) => {
+      const key = `${obj._id}-${obj.firstname}`;
+      if (seen.has(key)) {
+        return false;
+      } else {
+        seen.add(key);
+        return true;
+      }
+    });
 
-    return { data, total };
+    return {
+      data: data
+        .map((user) => {
+          return { ...user, id: user._id.toString() };
+        })
+        .filter((item) => item.id !== userId)
+        .sort((a, b) => b.lastOnline - a.lastOnline),
+      total: data.length,
+    };
   }
 
   async findById(id: RefType): Promise<UserDocument> {
-    return await this.userModel.findById(id);
+    const user = await this.userModel.findById(id).populate({
+      path: 'dialogs',
+      options: {
+        sort: { createdAt: -1 },
+      },
+      populate: [
+        {
+          path: 'users',
+          model: User.name,
+        },
+        {
+          path: 'messages',
+          options: {
+            sort: { createdAt: -1 },
+          },
+        },
+      ],
+    });
+
+    if (user && user.dialogs) {
+      user.dialogs = user.dialogs.map((dialog: any) => {
+        if (dialog.messages && dialog.messages.length > 0) {
+          return {
+            ...dialog.toObject(),
+            id: dialog._id.toString(),
+            messages: [dialog.messages[0]],
+          };
+        }
+        return dialog;
+      });
+    }
+
+    return user;
   }
 
   async findByEmail(email: string): Promise<UserDocument> {
@@ -48,10 +110,6 @@ export class UsersService {
       .select('+signInCode')
       .select('+signInCodeTimestamp')
       .select('+email');
-  }
-
-  async findByLogin(login: string): Promise<UserDocument> {
-    return this.userModel.findOne({ login: login.toLowerCase() });
   }
 
   async update(id: RefType, update: UpdateUserDto): Promise<UserDocument> {

@@ -13,7 +13,13 @@ export class CreateUserDto {
   email: string;
   @ApiProperty()
   @IsAlphanumeric()
-  username: string;
+  username?: string;
+  @ApiProperty()
+  @IsAlphanumeric()
+  firstname: string;
+  @ApiProperty()
+  @IsAlphanumeric()
+  lastname?: string;
   @ApiProperty()
   @IsNumberString()
   @Length(6, 6)

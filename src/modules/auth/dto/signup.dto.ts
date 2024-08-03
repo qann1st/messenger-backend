@@ -8,5 +8,11 @@ export class SignupDto {
   email: string;
   @ApiProperty()
   @IsAlphanumeric()
-  username: string;
+  firstname: string;
+  @ApiProperty()
+  @IsAlphanumeric()
+  lastname?: string;
+  @ApiProperty()
+  @IsAlphanumeric()
+  username?: string;
 }

@@ -33,13 +33,14 @@ import { UsersService } from './users.service';
 class TExists {
   @ApiProperty()
   exists: boolean;
+  @ApiProperty()
+  isHaveApproveCode: boolean;
 }
 
 @UseInterceptors(
   new NullInterceptor('User'),
   MongooseClassSerializerInterceptor(User),
 )
-@UseGuards(AccessTokenGuard)
 @Controller('users')
 @ApiTags('users')
 @ApiBearerAuth('Authorization')
@@ -49,28 +50,33 @@ export class UsersController {
 
   @Get()
   @ApiOkResponse({ type: [User] })
+  @UseGuards(AccessTokenGuard)
   async searchUser(
+    @CurrentUser() user: User,
     @Query('search') searchTerm: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
   ) {
     const { data, total } = await this.usersService.searchUser(
+      user.id,
       searchTerm,
-      page,
-      limit,
+      // page,
+      // limit,
     );
 
-    return { data, total, page, limit };
+    return { data, total, page: Number(page), limit: Number(limit) };
   }
 
   @Get('/me')
   @ApiOkResponse({ type: User })
+  @UseGuards(AccessTokenGuard)
   getMe(@CurrentUser() user: User) {
     return user;
   }
 
   @Patch('/me')
   @ApiOkResponse({ type: User })
+  @UseGuards(AccessTokenGuard)
   updateMe(
     @Body(ValidationPipe) updateUserDto: UpdateUserDto,
     @CurrentUser() id: RefType,
@@ -80,6 +86,7 @@ export class UsersController {
 
   @Delete('/me')
   @ApiOkResponse({ type: User })
+  @UseGuards(AccessTokenGuard)
   remove(@CurrentUser() id: RefType) {
     return this.usersService.remove(id);
   }
