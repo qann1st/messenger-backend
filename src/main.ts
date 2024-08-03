@@ -12,23 +12,25 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
-  const config = new DocumentBuilder()
-    .setTitle('Messenger Documentation')
-    .setVersion('1.0')
-    .addBearerAuth(
-      {
-        description: `Please enter token in following format: Bearer <JWT>`,
-        bearerFormat: 'Bearer',
-        scheme: 'Bearer',
-        type: 'http',
-        in: 'Header',
-        name: 'Authorization',
-      },
-      'Authorization',
-    )
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('Messenger Documentation')
+      .setVersion('1.0')
+      .addBearerAuth(
+        {
+          description: `Please enter token in following format: Bearer <JWT>`,
+          bearerFormat: 'Bearer',
+          scheme: 'Bearer',
+          type: 'http',
+          in: 'Header',
+          name: 'Authorization',
+        },
+        'Authorization',
+      )
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+  }
 
   await app.listen(3000);
 }
