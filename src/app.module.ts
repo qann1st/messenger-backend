@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '~modules/auth/auth.module';
+import { ChatModule } from '~modules/chat/chat.module';
 import { UsersModule } from '~modules/users/users.module';
 
 import { MONGODB_URI } from './shared/utils/constants';
@@ -13,6 +14,7 @@ import { MONGODB_URI } from './shared/utils/constants';
     MongooseModule.forRoot(MONGODB_URI),
     AuthModule,
     UsersModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
