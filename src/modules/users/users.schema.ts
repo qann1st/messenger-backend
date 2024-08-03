@@ -1,14 +1,19 @@
 import { Exclude } from 'class-transformer';
-import { Document } from 'mongoose';
+import { Document, RefType, Types } from 'mongoose';
 
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+
+import { Chat } from '~modules/chat/chat.schema';
 
 export type UserDocument = User & Document;
 
 @Schema({
   toJSON: {
-    virtuals: false,
+    virtuals: true,
+    transform: (_, ret) => {
+      delete ret._id;
+    },
   },
   timestamps: true,
   versionKey: false,
@@ -17,9 +22,9 @@ export class User {
   @ApiProperty({ type: String })
   id: string;
   @Exclude()
-  _id: string;
+  _id: Types.ObjectId;
   @ApiProperty({ type: String })
-  @Prop({ maxlength: 32 })
+  @Prop({ maxlength: 32, required: true })
   firstname: string;
   @ApiProperty({ type: String })
   @Prop({ maxlength: 32 })
@@ -36,8 +41,19 @@ export class User {
   signInCode: string;
   @Prop({ select: false })
   signInCodeTimestamp: number;
+  @ApiProperty({ type: Boolean })
+  @Prop({ default: false })
+  isOnline: boolean;
+  @ApiProperty({ type: Number })
+  @Prop({ default: Date.now() })
+  lastOnline: number;
+  @ApiProperty({ type: [Chat] })
+  @Prop({ default: [], type: [Types.ObjectId], ref: 'Chat' })
+  dialogs: RefType[];
+  @ApiProperty({ type: Date })
   @Prop()
   createdAt: Date;
+  @ApiProperty({ type: Date })
   @Prop()
   updatedAt: Date;
 }
