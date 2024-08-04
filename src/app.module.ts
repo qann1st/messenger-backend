@@ -4,16 +4,18 @@ import { MongooseModule } from '@nestjs/mongoose';
 
 import { AuthModule } from '~modules/auth/auth.module';
 import { ChatModule } from '~modules/chat/chat.module';
+import { UploadModule } from '~modules/upload/upload.module';
 import { UsersModule } from '~modules/users/users.module';
-
-import { MONGODB_URI } from './shared/utils/constants';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env', '.env.dev'] }),
-    MongooseModule.forRoot(MONGODB_URI),
+    MongooseModule.forRoot(
+      process.env.MONGODB_URI ?? 'mongodb://localhost:27017/messenger',
+    ),
     AuthModule,
     UsersModule,
+    UploadModule,
     ChatModule,
   ],
 })

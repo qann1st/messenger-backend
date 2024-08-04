@@ -82,23 +82,11 @@ export class UsersService {
           path: 'messages',
           options: {
             sort: { createdAt: -1 },
+            limit: 1,
           },
         },
       ],
     });
-
-    if (user && user.dialogs) {
-      user.dialogs = user.dialogs.map((dialog: any) => {
-        if (dialog.messages && dialog.messages.length > 0) {
-          return {
-            ...dialog.toObject(),
-            id: dialog._id.toString(),
-            messages: [dialog.messages[0]],
-          };
-        }
-        return dialog;
-      });
-    }
 
     return user;
   }

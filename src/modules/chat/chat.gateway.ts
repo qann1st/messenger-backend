@@ -13,7 +13,6 @@ import {
 } from '@nestjs/websockets';
 
 import { User, UserDocument } from '~modules/users/users.schema';
-import { REDIS_HOST, REDIS_PORT } from '~src/shared/utils/constants';
 
 import { Chat, ChatDocument } from './chat.schema';
 import { ChatService } from './chat.service';
@@ -36,9 +35,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private chatService: ChatService,
     private jwtService: JwtService,
   ) {
+    const host = process.env.REDIS_HOST ?? 'localhost';
+    const port = Number(process.env.REDIS_PORT) ?? 32768;
+
     this.redisClient = new Redis({
-      host: REDIS_HOST,
-      port: REDIS_PORT,
+      host,
+      port,
       connectionName: 'chat',
     });
   }
