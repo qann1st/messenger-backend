@@ -28,8 +28,11 @@ export class Message {
   @Prop({ required: true, ref: 'User' })
   sender: string;
   @ApiProperty({ type: String })
-  @Prop({ required: true, minlength: 1, maxlength: 1000 })
+  @Prop({ minlength: 0, maxlength: 1000 })
   content: string;
+  @ApiProperty({ type: [String] })
+  @Prop()
+  images: string[];
   @ApiProperty({ type: String })
   @Type(() => Types.ObjectId)
   @Prop()

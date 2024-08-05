@@ -1,9 +1,8 @@
-import { IsHexadecimal, IsString, Length } from 'class-validator';
+import { IsArray, IsHexadecimal, Length } from 'class-validator';
 
 export class MessageDto {
-  @IsString()
-  @Length(1, 1000)
-  content: string;
+  @Length(0, 1000)
+  content?: string;
   @IsHexadecimal()
   replyMessage: string;
   @IsHexadecimal()
@@ -12,4 +11,6 @@ export class MessageDto {
   recipient: string;
   @IsHexadecimal()
   chatId: string;
+  @IsArray()
+  images: string[];
 }

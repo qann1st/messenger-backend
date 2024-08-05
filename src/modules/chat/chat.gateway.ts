@@ -111,7 +111,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('message')
   async handleMessage(
     client: Socket,
-    { content, forwardedMessage, recipient, replyMessage, chatId }: MessageDto,
+    {
+      content,
+      forwardedMessage,
+      recipient,
+      replyMessage,
+      chatId,
+      images,
+    }: MessageDto,
   ) {
     const sender = await this.redisClient.get(client.id);
     const recipientSocket = await this.redisClient.get(recipient);
@@ -119,6 +126,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!chat) return;
     if (!chat.users.includes(sender)) return;
     if (!chat.users.includes(recipient)) return;
+
+    if (!content && !images) {
+      return;
+    }
 
     if (!recipient) return;
     if (!sender) return;
@@ -135,6 +146,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       replyMessage,
       sender,
       chatId,
+      images,
     });
     const populatedMessage = await message.populate('sender');
     await this.chatService.addMessage(chatId, message);

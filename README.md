@@ -12,6 +12,9 @@ REDIS_HOST="localhost"
 REDIS_PORT="32768"
 ```
 
+## Поместить service-account.json
+В директорию */src/modules/firebase-admin*
+
 ## Выполнить инсталляцию пакетов:
 
 ```bash
