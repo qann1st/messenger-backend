@@ -155,6 +155,33 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     client.to(recipientSocket).emit('message', populatedMessage);
   }
 
+  @SubscribeMessage('read-messages')
+  async readMessages(
+    client,
+    { roomId, recipient }: { roomId: string; recipient: string },
+  ) {
+    const sender = await this.redisClient.get(client.id);
+    const recipientSocket = await this.redisClient.get(recipient);
+    const chat = await this.chatModel.findByIdAndUpdate(roomId);
+    if (!chat) return;
+    if (!chat.users.includes(sender)) return;
+    if (!chat.users.includes(recipient)) return;
+
+    await this.messageModel.updateMany(
+      {
+        chatId: roomId,
+      },
+      {
+        $addToSet: {
+          readed: sender,
+        },
+      },
+    );
+
+    client.emit('read-messages', roomId);
+    client.to(recipientSocket).emit('read-messages', roomId);
+  }
+
   @SubscribeMessage('delete-message')
   async deleteMessage(
     client,

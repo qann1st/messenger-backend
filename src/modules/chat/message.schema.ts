@@ -53,6 +53,10 @@ export class Message {
   @ApiProperty({ type: Boolean })
   @Prop({ default: false })
   isEdited: boolean;
+  @ApiProperty({ type: String })
+  @Type(() => Types.ObjectId)
+  @Prop({ default: [] })
+  readed: string[];
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);
