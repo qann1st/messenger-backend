@@ -81,7 +81,7 @@ export class UploadService {
 
           stream.on('finish', () => {
             fileUpload.makePublic().then(() => {
-              const publicUrl = `https://storage.googleapis.com/${this.bucket.name}/${fileUpload.name}`;
+              const publicUrl = `https://${this.bucket.name}.storage.googleapis.com/${fileUpload.name}`;
               resolve(publicUrl);
             });
           });

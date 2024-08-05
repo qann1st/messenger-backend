@@ -1,4 +1,11 @@
-import { IsArray, IsHexadecimal, Length } from 'class-validator';
+import {
+  IsArray,
+  IsHexadecimal,
+  IsNumber,
+  isNumber,
+  IsString,
+  Length,
+} from 'class-validator';
 
 export class MessageDto {
   @Length(0, 1000)
@@ -13,4 +20,8 @@ export class MessageDto {
   chatId: string;
   @IsArray()
   images: string[];
+  @IsString()
+  voiceMessage: Buffer;
+  @IsNumber()
+  size: number;
 }

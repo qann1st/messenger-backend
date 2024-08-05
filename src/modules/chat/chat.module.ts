@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { MongooseModule } from '@nestjs/mongoose';
 
+import { FirebaseAdminModule } from '~modules/firebase-admin/firebase-admin.module';
+import { UploadService } from '~modules/upload/upload.service';
 import { User, UserSchema } from '~modules/users/users.schema';
 
 import { ChatController } from './chat.controller';
@@ -18,8 +20,9 @@ import { Message, MessageSchema } from './message.schema';
       { name: User.name, schema: UserSchema },
     ]),
     JwtModule.register({}),
+    FirebaseAdminModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway],
+  providers: [ChatService, ChatGateway, UploadService],
 })
 export class ChatModule {}

@@ -57,6 +57,9 @@ export class Message {
   @Type(() => Types.ObjectId)
   @Prop({ default: [] })
   readed: string[];
+  @ApiProperty({ type: String })
+  @Prop()
+  voiceMessage: string;
 }
 
 export const MessageSchema = SchemaFactory.createForClass(Message);

@@ -12,6 +12,8 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 
+import { MFile } from '~modules/upload/mfile.class';
+import { UploadService } from '~modules/upload/upload.service';
 import { User, UserDocument } from '~modules/users/users.schema';
 
 import { Chat, ChatDocument } from './chat.schema';
@@ -32,6 +34,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @InjectModel(Chat.name) private chatModel: Model<ChatDocument>,
     @InjectModel(Message.name) private messageModel: Model<MessageDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private uploadService: UploadService,
     private chatService: ChatService,
     private jwtService: JwtService,
   ) {
@@ -118,6 +121,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       replyMessage,
       chatId,
       images,
+      voiceMessage,
+      size,
     }: MessageDto,
   ) {
     const sender = await this.redisClient.get(client.id);
@@ -127,7 +132,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!chat.users.includes(sender)) return;
     if (!chat.users.includes(recipient)) return;
 
-    if (!content && !images) {
+    if (!content && !images && !voiceMessage) {
       return;
     }
 
@@ -136,14 +141,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const recipientUser = await this.userModel.findById(recipient);
     if (!recipientUser.dialogs.includes(chatId)) {
       await recipientUser.updateOne({
-        $push: { dialogs: chatId },
+        $addToSet: { dialogs: chatId },
       });
     }
 
+    if (voiceMessage) {
+      const file = new MFile({
+        buffer: voiceMessage,
+        mimetype: 'audio/ogg; codecs=opus',
+        originalname: 'voice.ogg',
+        size,
+      } as MFile);
+
+      const newFiles = await this.uploadService.filterFiles([file]);
+      const fileUrl = await this.uploadService.uploadFile(newFiles);
+
+      const message = await this.messageModel.create({
+        forwardedMessage,
+        voiceMessage: fileUrl[0],
+        replyMessage,
+        content,
+        sender,
+        chatId,
+      });
+      const populatedMessage = await message.populate('sender');
+      await this.chatService.addMessage(chatId, message);
+
+      client.emit('message', populatedMessage);
+      client.to(recipientSocket).emit('message', populatedMessage);
+
+      return;
+    }
+
     const message = await this.messageModel.create({
-      content,
       forwardedMessage,
       replyMessage,
+      content,
       sender,
       chatId,
       images,

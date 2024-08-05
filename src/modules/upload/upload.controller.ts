@@ -4,13 +4,17 @@ import {
   HttpStatus,
   Post,
   UploadedFiles,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 
+import { AccessTokenGuard } from '~modules/auth/guards/access-token.guard';
+
 import { UploadService } from './upload.service';
 
+@UseGuards(AccessTokenGuard)
 @ApiTags('files')
 @Controller('files')
 export class UploadController {
