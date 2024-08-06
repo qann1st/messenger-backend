@@ -193,12 +193,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const chat = await this.chatRepository.findOne({ where: { id: roomId } });
     if (!chat) return;
 
-    await this.messageRepository.update(
-      { chatId: roomId },
-      { readed: [sender, recipient] },
-    );
+    const messages = await this.messageRepository.find({
+      where: { chatId: roomId },
+      select: [
+        'chat',
+        'chatId',
+        'content',
+        'createdAt',
+        'forwardedMessage',
+        'id',
+        'images',
+        'isEdited',
+        'readed',
+        'replyMessage',
+        'sender',
+        'updatedAt',
+        'voiceMessage',
+      ],
+    });
 
-    client.emit('read-messages', roomId);
+    messages?.map((el) => {
+      if (!el.readed?.includes(sender)) {
+        if (!el.readed) el.readed = [];
+        el.readed.push(sender);
+      }
+    });
+
+    await this.messageRepository.save(messages);
+
     client.to(recipientSocket).emit('read-messages', roomId);
   }
 
