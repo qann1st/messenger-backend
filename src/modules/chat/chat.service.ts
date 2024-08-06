@@ -1,90 +1,131 @@
-import { Model } from 'mongoose';
+import { Repository } from 'typeorm';
 
 import {
   BadRequestException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
 
-import { User, UserDocument } from '~modules/users/users.schema';
+import { User } from '~modules/users/users.entity';
 
-import { Chat, ChatDocument } from './chat.schema';
-import { Message, MessageDocument } from './message.schema';
+import { Chat } from './chat.entity';
+import { Message } from './message.entity';
 
 @Injectable()
 export class ChatService {
   constructor(
-    @InjectModel(Chat.name) private chatModel: Model<ChatDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Message.name) private messagesModel: Model<MessageDocument>,
+    @InjectRepository(Chat) private chatRepository: Repository<Chat>,
+    @InjectRepository(User) private userRepository: Repository<User>,
+    @InjectRepository(Message) private messageRepository: Repository<Message>,
   ) {}
 
   async createChat(userId: string, recipientId: string) {
     if (!recipientId) throw new BadRequestException('Recipient id is required');
-    const chat = await this.chatModel.create({
-      users: [userId, recipientId],
+
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const recipient = await this.userRepository.findOne({
+      where: { id: recipientId },
     });
 
-    await this.userModel.findByIdAndUpdate(userId, {
-      $push: { dialogs: chat.id },
-    });
-    await this.userModel.findByIdAndUpdate(recipientId, {
-      $push: { dialogs: chat.id },
+    if (!user || !recipient) {
+      throw new NotFoundException('User or recipient not found');
+    }
+
+    const chat = this.chatRepository.create({
+      users: [user, recipient],
     });
 
-    return await this.chatModel.findById(chat.id).populate('users');
+    await this.chatRepository.save(chat);
+
+    if (!user.dialogs) user.dialogs = [];
+    if (!recipient.dialogs) recipient.dialogs = [];
+
+    user.dialogs.push(chat);
+    recipient.dialogs.push(chat);
+
+    await this.userRepository.save(user);
+    await this.userRepository.save(recipient);
+
+    return this.chatRepository.findOne({
+      where: { id: chat.id },
+      relations: ['users'],
+    });
   }
 
   async deleteChat(chatId: string, userId: string, recipientId: string) {
     if (!chatId) throw new BadRequestException('Chat id is required');
     if (!recipientId) throw new BadRequestException('Recipient id is required');
-    const chat = await this.chatModel.findByIdAndDelete(chatId);
-    await this.messagesModel.deleteMany({ chatId });
 
-    await this.userModel.findByIdAndUpdate(
-      userId,
-      { $pull: { dialogs: chatId } },
-      { new: true },
-    );
-    await this.userModel.findByIdAndUpdate(
-      recipientId,
-      { $pull: { dialogs: chatId } },
-      { new: true },
-    );
-
-    return chat;
-  }
-
-  async addMessage(chatId: string, message: Message) {
-    return this.chatModel.findByIdAndUpdate(
-      chatId,
-      { $push: { messages: message.id } },
-      { new: true },
-    );
-  }
-
-  async getMessages(chatId: string, page: number = 1, limit: number = 30) {
-    const skip = (page - 1) * limit;
-
-    const chat = await this.chatModel
-      .findById(chatId)
-      .populate({
-        path: 'messages',
-        populate: [{ path: 'sender' }],
-        options: {
-          sort: { createdAt: -1 },
-        },
-      })
-      .populate('users')
-      .exec();
+    const chat = await this.chatRepository.findOne({
+      where: { id: chatId },
+      relations: ['users', 'messages'],
+    });
 
     if (!chat) {
       throw new NotFoundException('Chat not found');
     }
 
+    await this.messageRepository.delete({ chatId });
+    await this.chatRepository.remove(chat);
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['dialogs'],
+    });
+    const recipient = await this.userRepository.findOne({
+      where: { id: recipientId },
+      relations: ['dialogs'],
+    });
+
+    if (user && recipient) {
+      user.dialogs = user.dialogs.filter((dialog) => dialog.id !== chatId);
+      recipient.dialogs = recipient.dialogs.filter(
+        (dialog) => dialog.id !== chatId,
+      );
+
+      await this.userRepository.save(user);
+      await this.userRepository.save(recipient);
+    }
+
+    return chat;
+  }
+
+  async addMessage(chatId: string, message: Message) {
+    const chat = await this.chatRepository.findOne({
+      where: { id: chatId },
+      relations: ['messages'],
+    });
+
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    chat.messages.push(message);
+    await this.chatRepository.save(chat);
+
+    return chat;
+  }
+
+  async getMessages(chatId: string, page: number = 1, limit: number = 30) {
+    const skip = (page - 1) * limit;
+
+    const chat = await this.chatRepository.findOne({
+      where: { id: chatId },
+      relations: ['users', 'messages'],
+      order: { messages: { createdAt: 'DESC' } },
+    });
+
+    if (!chat.messages) chat.messages = [];
+
+    if (!chat) {
+      throw new NotFoundException('Chat not found');
+    }
+
+    const messages = chat.messages.slice(skip, skip + limit);
+
     return {
-      data: chat.messages.slice(skip, skip + limit),
+      data: messages,
       users: chat.users,
       total: chat.messages.length,
     };

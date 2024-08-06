@@ -18,12 +18,12 @@ import {
 
 import { CurrentUser } from '~modules/auth/decorators/current-user.decorator';
 import { AccessTokenGuard } from '~modules/auth/guards/access-token.guard';
-import { User } from '~modules/users/users.schema';
+import { User } from '~modules/users/users.entity';
 import { NullInterceptor } from '~src/shared/interceptors/null-interceptor';
 
-import { Chat } from './chat.schema';
+import { Chat } from './chat.entity';
 import { ChatService } from './chat.service';
-import { Message } from './message.schema';
+import { Message } from './message.entity';
 
 class ChatWithPagination {
   @ApiProperty()

@@ -1,110 +1,98 @@
-import { Model, RefType } from 'mongoose';
+import { Repository } from 'typeorm';
 
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
 
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User, UserDocument } from './users.schema';
+import { User } from './users.entity';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private userModel: Model<UserDocument>) {}
+  constructor(
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
+  ) {}
 
-  async create(createUserDto: CreateUserDto): Promise<UserDocument> {
-    return this.userModel.create(createUserDto);
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    const newUser = this.userRepository.create(createUserDto);
+    return await this.userRepository.save(newUser);
   }
 
   async searchUser(
     userId: string,
     searchTerm: string,
-    // page: number = 1,
-    // limit: number = 30,
   ): Promise<{ data: User[]; total: number }> {
     if (!searchTerm) throw new BadRequestException('Search term is required');
 
-    const query = {
-      username: new RegExp(searchTerm, 'i'),
-      firstname: new RegExp(searchTerm, 'i'),
-      lastname: new RegExp(searchTerm, 'i'),
-    };
-    const usersByUsername = await this.userModel
-      .find({
-        username: query.username,
+    const users = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.username ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
       })
-      .lean();
-    const usersByFirstname = await this.userModel
-      .find({
-        firstname: query.firstname,
+      .orWhere('user.firstname ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
       })
-      .lean();
-    const usersByLastname = await this.userModel
-      .find({
-        lastname: query.lastname,
+      .orWhere('user.lastname ILIKE :searchTerm', {
+        searchTerm: `%${searchTerm}%`,
       })
-      .lean();
+      .getMany();
 
-    const arr = [...usersByUsername, ...usersByFirstname, ...usersByLastname];
-    const seen = new Set();
-    const data = arr.filter((obj) => {
-      const key = `${obj._id}-${obj.firstname}`;
-      if (seen.has(key)) {
-        return false;
-      } else {
-        seen.add(key);
-        return true;
-      }
-    });
+    const data = users
+      .filter((user) => user.id !== userId)
+      .sort((a, b) => b.lastOnline - a.lastOnline);
 
     return {
-      data: data
-        .map((user) => {
-          return { ...user, id: user._id.toString() };
-        })
-        .filter((item) => item.id !== userId)
-        .sort((a, b) => b.lastOnline - a.lastOnline),
+      data,
       total: data.length,
     };
   }
 
-  async findById(id: RefType): Promise<UserDocument> {
-    const user = await this.userModel.findById(id).populate({
-      path: 'dialogs',
-      options: {
-        sort: { createdAt: -1 },
-      },
-      populate: [
-        {
-          path: 'users',
-          model: User.name,
-        },
-        {
-          path: 'messages',
-          options: {
-            sort: { createdAt: -1 },
-            limit: 1,
+  async findById(id: string): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['dialogs', 'dialogs.users', 'dialogs.messages'],
+      order: {
+        dialogs: {
+          updatedAt: 'DESC',
+          messages: {
+            createdAt: 'DESC',
           },
         },
-      ],
+      },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    user.dialogs = user.dialogs.map((dialog) => {
+      const lastMessage = dialog.messages.sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      )[0];
+
+      return {
+        ...dialog,
+        messages: lastMessage ? [lastMessage] : [],
+      };
     });
 
     return user;
   }
 
-  async findByEmail(email: string): Promise<UserDocument> {
-    return this.userModel
-      .findOne({ email })
-      .select('+approveCode')
-      .select('+signInCode')
-      .select('+signInCodeTimestamp')
-      .select('+email');
+  async findByEmail(email: string): Promise<User> {
+    return this.userRepository.findOne({
+      where: { email },
+      select: ['approveCode', 'signInCode', 'signInCodeTimestamp', 'email'],
+    });
   }
 
-  async update(id: RefType, update: UpdateUserDto): Promise<UserDocument> {
-    return await this.userModel.findByIdAndUpdate(id, update, { new: true });
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    await this.userRepository.update(id, updateUserDto);
+    return await this.userRepository.findOne({ where: { id } });
   }
 
-  async remove(id: RefType) {
-    return await this.userModel.findByIdAndDelete(id);
+  async remove(id: string): Promise<void> {
+    await this.userRepository.delete(id);
   }
 }

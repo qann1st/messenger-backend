@@ -1,5 +1,3 @@
-import { RefType } from 'mongoose';
-
 import {
   Body,
   Controller,
@@ -23,11 +21,10 @@ import {
 
 import { CurrentUser } from '~modules/auth/decorators/current-user.decorator';
 import { AccessTokenGuard } from '~modules/auth/guards/access-token.guard';
-import MongooseClassSerializerInterceptor from '~shared/interceptors/mongo-serialize-interceptor';
 import { NullInterceptor } from '~shared/interceptors/null-interceptor';
 
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './users.schema';
+import { User } from './users.entity';
 import { UsersService } from './users.service';
 
 class TExists {
@@ -37,10 +34,7 @@ class TExists {
   isHaveApproveCode: boolean;
 }
 
-@UseInterceptors(
-  new NullInterceptor('User'),
-  MongooseClassSerializerInterceptor(User),
-)
+@UseInterceptors(new NullInterceptor('User'))
 @Controller('users')
 @ApiTags('users')
 @ApiBearerAuth('Authorization')
@@ -60,8 +54,6 @@ export class UsersController {
     const { data, total } = await this.usersService.searchUser(
       user.id,
       searchTerm,
-      // page,
-      // limit,
     );
 
     return { data, total, page: Number(page), limit: Number(limit) };
@@ -79,16 +71,16 @@ export class UsersController {
   @UseGuards(AccessTokenGuard)
   updateMe(
     @Body(ValidationPipe) updateUserDto: UpdateUserDto,
-    @CurrentUser() id: RefType,
+    @CurrentUser() user: User,
   ) {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(user.id, updateUserDto);
   }
 
   @Delete('/me')
   @ApiOkResponse({ type: User })
   @UseGuards(AccessTokenGuard)
-  remove(@CurrentUser() id: RefType) {
-    return this.usersService.remove(id);
+  remove(@CurrentUser() user: User) {
+    return this.usersService.remove(user.id);
   }
 
   @Get('/exists/:email')

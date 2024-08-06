@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcrypt';
-import { Model } from 'mongoose';
+import { Repository } from 'typeorm';
 
 import {
   BadRequestException,
@@ -9,12 +9,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { InjectModel } from '@nestjs/mongoose';
+import { InjectRepository } from '@nestjs/typeorm';
 
 import { TransporterService } from '~modules/transporter/transporter.service';
-import { UsersService } from '~modules/users/users.service';
+import { User } from '~modules/users/users.entity';
 
-import { Auth, AuthDocument } from './auth.schema';
+import { Auth } from './auth.entity';
 import { ApproveDto } from './dto/approve.dto';
 import { SigninDto } from './dto/signin.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -27,15 +27,17 @@ type Payload = {
 @Injectable()
 export class AuthService {
   constructor(
-    @InjectModel(Auth.name) private authModel: Model<AuthDocument>,
-    private usersService: UsersService,
+    @InjectRepository(Auth) private authRepository: Repository<Auth>,
+    @InjectRepository(User) private userRepository: Repository<User>,
     private jwtService: JwtService,
     private configService: ConfigService,
     private transporterService: TransporterService,
   ) {}
 
   async signUp(createUserDto: SignupDto) {
-    const userExists = await this.usersService.findByEmail(createUserDto.email);
+    const userExists = await this.userRepository.findOne({
+      where: { email: createUserDto.email },
+    });
 
     if (userExists) {
       throw new BadRequestException('User already exists');
@@ -43,16 +45,21 @@ export class AuthService {
 
     const approveCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    this.transporterService.sendMail({
-      to: createUserDto.email,
-      subject: 'Подтверждение учетной записи',
-      html: `<p>Ваш код подтверждения: ${approveCode}</p>`,
-    });
+    try {
+      await this.transporterService.sendMail({
+        to: createUserDto.email,
+        subject: 'Подтверждение учетной записи',
+        html: `<p>Ваш код подтверждения: ${approveCode}</p>`,
+      });
+    } catch (error) {
+      throw new Error('Failed to send email');
+    }
 
-    await this.usersService.create({
+    const user = this.userRepository.create({
       ...createUserDto,
       approveCode,
     });
+    await this.userRepository.save(user);
 
     return {
       success: true,
@@ -60,27 +67,31 @@ export class AuthService {
   }
 
   async signIn(data: SigninDto) {
-    const user = await this.usersService.findByEmail(data.email);
+    const user = await this.userRepository.findOne({
+      where: { email: data.email },
+    });
     if (!user) throw new BadRequestException('User does not exist');
 
     const signInCode = Math.floor(100000 + Math.random() * 900000).toString();
-    this.transporterService.sendMail({
-      to: data.email,
-      subject: 'Вход в учетную запись',
-      html: `
-      <div>
-        <p>Ваш код для входа: ${signInCode}</p>
-        <p>Код действителен 15 минут!</p>
-      </div>
-      `,
-    });
-    const date = Date.now();
+    try {
+      await this.transporterService.sendMail({
+        to: data.email,
+        subject: 'Вход в учетную запись',
+        html: `
+        <div>
+          <p>Ваш код для входа: ${signInCode}</p>
+          <p>Код действителен 15 минут!</p>
+        </div>
+        `,
+      });
+    } catch (error) {
+      throw new Error('Failed to send email');
+    }
 
-    await user.updateOne({
-      $set: {
-        signInCode,
-        signInCodeTimestamp: date,
-      },
+    const date = new Date().getTime();
+    await this.userRepository.update(user.id, {
+      signInCode,
+      signInCodeTimestamp: date,
     });
 
     return {
@@ -89,23 +100,26 @@ export class AuthService {
   }
 
   async signInApproved({ email, approveCode: signInCode }: ApproveDto) {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.userRepository.findOne({
+      where: { email },
+      select: ['signInCode', 'signInCodeTimestamp', 'id', 'email'],
+    });
+    if (!user) throw new BadRequestException('User does not exist');
 
-    const differenceInMilliseconds = Date.now() - user.signInCodeTimestamp;
+    const differenceInMilliseconds =
+      new Date().getTime() - user.signInCodeTimestamp;
     const differenceInMinutes = differenceInMilliseconds / 1000 / 60;
 
     if (differenceInMinutes >= 15) {
-      await user.updateOne({
-        $unset: { signInCode, signInCodeTimestamp: null },
+      await this.userRepository.update(user.id, {
+        signInCode: null,
+        signInCodeTimestamp: null,
       });
 
       throw new BadRequestException('Code expired');
     }
 
-    if (!user) throw new BadRequestException('User does not exist');
-    if (user.signInCode == null)
-      throw new BadRequestException('User have not sign in code');
-    if (user.signInCode !== signInCode)
+    if (!user.signInCode || user.signInCode !== signInCode)
       throw new BadRequestException('Wrong code');
 
     const payload: Payload = {
@@ -113,20 +127,24 @@ export class AuthService {
       email: user.email,
     };
 
-    await user.updateOne({ $unset: { signInCode } });
+    await this.userRepository.update(user.id, { signInCode: null });
 
     return await this.updateRefreshToken(user.id, payload);
   }
 
   async approve({ approveCode, email }: ApproveDto) {
-    const user = await this.usersService.findByEmail(email);
+    const user = await this.userRepository.findOne({
+      where: { email },
+      select: ['approveCode', 'id', 'email'],
+    });
+
     if (!user) throw new NotFoundException('User not found');
     if (!user.approveCode)
       throw new BadRequestException('User already approved');
     if (user.approveCode !== approveCode)
       throw new BadRequestException('Wrong code');
 
-    await user.updateOne({ $unset: { approveCode } });
+    await this.userRepository.update(user.id, { approveCode: null });
 
     const payload: Payload = {
       _id: user.id,
@@ -137,34 +155,43 @@ export class AuthService {
   }
 
   async logout(userId: string, refreshToken: string) {
-    const update = await this.authModel.findOneAndUpdate(
-      { user: userId },
-      { $pull: { refreshTokens: refreshToken } },
+    const auth = await this.authRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!auth) throw new BadRequestException('Auth record not found');
+
+    const updatedTokens = auth.refreshTokens.filter(
+      (token) => token !== refreshToken,
     );
-    return { success: !!update };
+    await this.authRepository.update(auth.id, { refreshTokens: updatedTokens });
+
+    return { success: true };
   }
 
   async removeAllRefreshTokens(userId: string) {
-    const update = await this.authModel.findOneAndUpdate(
-      { user: userId },
-      { refreshTokens: [] },
-    );
-    return { success: !!update };
+    const auth = await this.authRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!auth) throw new BadRequestException('Auth record not found');
+
+    await this.authRepository.update(auth.id, { refreshTokens: [] });
+    return { success: true };
   }
 
   async refreshTokens(userId: string, refreshToken: string) {
-    const auth = await this.authModel
-      .findOne({ user: userId })
-      .populate('user')
-      .exec();
-    if (!auth.refreshTokens.includes(refreshToken))
+    const auth = await this.authRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['user'],
+    });
+    if (!auth || !auth.refreshTokens.includes(refreshToken))
       throw new ForbiddenException('Access Denied');
+
     const payload: Payload = {
       _id: auth.user.id,
       email: auth.user.email,
     };
-    await this.logout(auth.user.id, refreshToken);
-    return await this.updateRefreshToken(auth.user.id, payload);
+    await this.logout(userId, refreshToken);
+    return await this.updateRefreshToken(userId, payload);
   }
 
   async hashData(data: string) {
@@ -175,11 +202,22 @@ export class AuthService {
   async updateRefreshToken(userId: string, payload: Payload) {
     const tokens = await this.getTokens(payload);
 
-    await this.authModel.updateOne(
-      { user: userId },
-      { $addToSet: { refreshTokens: tokens.refreshToken } },
-      { upsert: true },
-    );
+    let auth = await this.authRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!auth) {
+      auth = this.authRepository.create({
+        user: { id: userId },
+        refreshTokens: [tokens.refreshToken],
+      });
+    } else {
+      const updatedTokens = auth.refreshTokens.includes(tokens.refreshToken)
+        ? auth.refreshTokens
+        : [...auth.refreshTokens, tokens.refreshToken];
+      await this.authRepository.update(auth.id, {
+        refreshTokens: updatedTokens,
+      });
+    }
 
     return tokens;
   }

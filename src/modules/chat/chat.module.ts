@@ -1,24 +1,20 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { FirebaseAdminModule } from '~modules/firebase-admin/firebase-admin.module';
 import { UploadService } from '~modules/upload/upload.service';
-import { User, UserSchema } from '~modules/users/users.schema';
+import { User } from '~modules/users/users.entity';
 
 import { ChatController } from './chat.controller';
+import { Chat } from './chat.entity';
 import { ChatGateway } from './chat.gateway';
-import { Chat, ChatSchema } from './chat.schema';
 import { ChatService } from './chat.service';
-import { Message, MessageSchema } from './message.schema';
+import { Message } from './message.entity';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Message.name, schema: MessageSchema },
-      { name: Chat.name, schema: ChatSchema },
-      { name: User.name, schema: UserSchema },
-    ]),
+    TypeOrmModule.forFeature([Message, Chat, User]),
     JwtModule.register({}),
     FirebaseAdminModule,
   ],

@@ -69,7 +69,7 @@ export class AuthController {
       secure: true,
     });
     res.cookie('at', tokens.accessToken, {
-      expires: new Date(Date.now() + 900000),
+      expires: new Date(Date.now() + 1296000000),
       httpOnly: true,
       secure: true,
     });
@@ -90,7 +90,7 @@ export class AuthController {
       secure: true,
     });
     res.cookie('at', tokens.accessToken, {
-      expires: new Date(Date.now() + 900000),
+      expires: new Date(Date.now() + 1296000000),
       httpOnly: true,
       secure: true,
     });
