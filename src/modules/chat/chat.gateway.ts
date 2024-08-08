@@ -240,12 +240,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
     if (!chat) return;
 
+    const message = chat.messages.find((msg) => msg.id === messageId);
+
     await this.messageRepository.delete(messageId);
     chat.messages = chat.messages.filter((message) => message.id !== messageId);
     await this.chatRepository.save(chat);
 
-    client.emit('delete-message', messageId);
-    client.to(recipientSocket).emit('delete-message', messageId);
+    client.emit('delete-message', message);
+    client.to(recipientSocket).emit('delete-message', message);
   }
 
   @SubscribeMessage('edit-message')
