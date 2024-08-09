@@ -23,9 +23,13 @@ export class ChatService {
   async createChat(userId: string, recipientId: string) {
     if (!recipientId) throw new BadRequestException('Recipient id is required');
 
-    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['dialogs'],
+    });
     const recipient = await this.userRepository.findOne({
       where: { id: recipientId },
+      relations: ['dialogs'],
     });
 
     if (!user || !recipient) {
@@ -41,8 +45,8 @@ export class ChatService {
     if (!user.dialogs) user.dialogs = [];
     if (!recipient.dialogs) recipient.dialogs = [];
 
-    user.dialogs.push(chat);
-    recipient.dialogs.push(chat);
+    user.dialogs.unshift(chat);
+    recipient.dialogs.unshift(chat);
 
     await this.userRepository.save(user);
     await this.userRepository.save(recipient);

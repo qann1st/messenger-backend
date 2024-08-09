@@ -15,7 +15,10 @@ export class UsersService {
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const newUser = this.userRepository.create(createUserDto);
+    const newUser = this.userRepository.create({
+      ...createUserDto,
+      email: createUserDto.email.toLowerCase(),
+    });
     return await this.userRepository.save(newUser);
   }
 
@@ -66,15 +69,15 @@ export class UsersService {
       throw new Error('User not found');
     }
 
-    user.dialogs = user.dialogs.map((dialog) => {
-      const lastMessage = dialog.messages.sort(
-        (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-      )[0];
+    user.dialogs.sort((a, b) => {
+      const messageA = a.messages[0]?.createdAt;
+      const messageB = b.messages[0]?.createdAt;
 
-      return {
-        ...dialog,
-        messages: lastMessage ? [lastMessage] : [],
-      };
+      if (!messageA && !messageB) return 0;
+      if (!messageA) return 1;
+      if (!messageB) return -1;
+
+      return messageB.getTime() - messageA.getTime();
     });
 
     return user;
@@ -82,7 +85,7 @@ export class UsersService {
 
   async findByEmail(email: string): Promise<User> {
     return this.userRepository.findOne({
-      where: { email },
+      where: { email: email.toLowerCase() },
       select: ['approveCode', 'signInCode', 'signInCodeTimestamp', 'email'],
     });
   }
