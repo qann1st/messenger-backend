@@ -38,6 +38,11 @@ class ChatWithPagination {
   limit: number;
 }
 
+class Page {
+  @ApiProperty()
+  page: number;
+}
+
 @UseInterceptors(new NullInterceptor('Chat'))
 @UseGuards(AccessTokenGuard)
 @Controller('chat')
@@ -72,5 +77,21 @@ export class ChatController {
     );
 
     return { data, users, total, page: Number(page), limit: Number(limit) };
+  }
+
+  @HttpCode(HttpStatus.OK)
+  @Get('/messages/page/:messageId/:roomId/:limit')
+  @ApiBearerAuth('Authorization')
+  @ApiOkResponse({ type: Page })
+  getMessagePageById(
+    @Param('roomId') roomId: string,
+    @Param('messageId') messageId: string,
+    @Param('limit') limit: number = 10,
+  ) {
+    return this.chatService.getPageMessageById(
+      messageId,
+      roomId,
+      Number(limit),
+    );
   }
 }

@@ -113,7 +113,7 @@ export class ChatService {
     try {
       const chat = await this.chatRepository.findOne({
         where: { id: chatId },
-        relations: ['users', 'messages'],
+        relations: ['users', 'messages', 'messages.replyMessage'],
         order: { messages: { createdAt: 'DESC' } },
       });
 
@@ -130,6 +130,36 @@ export class ChatService {
         users: chat.users,
         total: chat.messages.length,
       };
+    } catch (err) {
+      throw new BadRequestException('Invalid chat id or chat not found');
+    }
+  }
+
+  async getPageMessageById(messageId: string, chatId: string, limit: number) {
+    try {
+      const chat = await this.chatRepository.findOne({
+        where: { id: chatId },
+        relations: ['messages'],
+        order: { messages: { createdAt: 'DESC' } },
+      });
+
+      if (!chat) {
+        throw new NotFoundException('Chat not found');
+      }
+
+      if (!chat.messages) chat.messages = [];
+
+      const messageIndex = chat.messages.findIndex(
+        (msg) => msg.id === messageId,
+      );
+
+      if (messageIndex === -1) {
+        throw new NotFoundException('Message not found');
+      }
+
+      const page = Math.floor(messageIndex / limit) + 1;
+
+      return { page };
     } catch (err) {
       throw new BadRequestException('Invalid chat id or chat not found');
     }

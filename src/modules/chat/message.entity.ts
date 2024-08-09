@@ -34,7 +34,7 @@ export class Message {
   @ApiProperty({ type: [String] })
   images: string[];
 
-  @Column({ type: 'uuid', nullable: true })
+  @ManyToOne(() => Message)
   @ApiProperty({ type: String })
   replyMessage: string;
 
