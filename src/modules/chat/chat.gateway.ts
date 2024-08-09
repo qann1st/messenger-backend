@@ -179,8 +179,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const savedMessage = await this.messageRepository.save(message);
 
-    client.emit('message', savedMessage);
-    client.to(recipientSocket).emit('message', savedMessage);
+    const msg = await this.messageRepository.findOne({
+      where: { id: savedMessage.id },
+      relations: ['replyMessage'],
+    });
+
+    client.emit('message', msg);
+    client.to(recipientSocket).emit('message', msg);
   }
 
   @SubscribeMessage('read-messages')

@@ -2,7 +2,6 @@ import {
   IsArray,
   IsHexadecimal,
   IsNumber,
-  isNumber,
   IsString,
   Length,
 } from 'class-validator';
