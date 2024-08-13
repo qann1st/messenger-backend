@@ -111,28 +111,36 @@ export class ChatService {
     return chat;
   }
 
-  async getMessages(chatId: string, page: number = 1, limit: number = 30) {
+  async getMessages(
+    chatId: string,
+    page: number = 1,
+    limit: number = 30,
+    newLimit?: number,
+  ) {
     const skip = (page - 1) * limit;
 
     try {
       const chat = await this.chatRepository.findOne({
         where: { id: chatId },
-        relations: ['users', 'messages', 'messages.replyMessage'],
-        order: { messages: { createdAt: 'DESC' } },
+        relations: ['users'],
       });
-
-      if (!chat.messages) chat.messages = [];
 
       if (!chat) {
         throw new NotFoundException('Chat not found');
       }
 
-      const messages = chat.messages.slice(skip, skip + limit);
+      const [messages, total] = await this.messageRepository.findAndCount({
+        where: { chat: { id: chatId } },
+        relations: ['replyMessage'],
+        order: { createdAt: 'DESC' },
+        skip,
+        take: newLimit || limit,
+      });
 
       return {
         data: messages,
         users: chat.users,
-        total: chat.messages.length,
+        total: total,
       };
     } catch (err) {
       throw new BadRequestException('Invalid chat id or chat not found');

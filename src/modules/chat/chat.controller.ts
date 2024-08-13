@@ -69,11 +69,13 @@ export class ChatController {
     @Param('roomId') roomId: string,
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
+    @Query('newLimit') newLimit: number = 10,
   ) {
     const { data, users, total } = await this.chatService.getMessages(
       roomId,
       Number(page),
       Number(limit),
+      newLimit ? Number(newLimit) : 0,
     );
 
     return { data, users, total, page: Number(page), limit: Number(limit) };

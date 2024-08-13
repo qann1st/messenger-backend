@@ -114,6 +114,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const userId = await this.redisClient.get(String(recipient.id));
         if (userId) {
           client.to(userId).emit('offline', el.id, user.lastOnline);
+          client.to(userId).emit('print', {
+            roomId: el.id,
+            sender: user.id,
+            printing: false,
+          });
         }
       });
     } catch {}
@@ -227,6 +232,23 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     await this.messageRepository.save(messages);
 
     client.to(recipientSocket).emit('read-messages', roomId);
+  }
+
+  @SubscribeMessage('print')
+  async startPrint(
+    client: Socket,
+    {
+      roomId,
+      recipient,
+      startPrint,
+    }: { roomId: string; recipient: string; startPrint: boolean },
+  ) {
+    const sender = await this.redisClient.get(client.id);
+    const recipientSocket = await this.redisClient.get(recipient);
+
+    client
+      .to(recipientSocket)
+      .emit('print', { roomId, sender, printing: startPrint });
   }
 
   @SubscribeMessage('delete-message')
