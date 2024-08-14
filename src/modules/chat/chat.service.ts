@@ -131,7 +131,7 @@ export class ChatService {
 
       const [messages, total] = await this.messageRepository.findAndCount({
         where: { chat: { id: chatId } },
-        relations: ['replyMessage'],
+        relations: ['replyMessage', 'forwardedMessage'],
         order: { createdAt: 'DESC' },
         skip,
         take: newLimit || limit,

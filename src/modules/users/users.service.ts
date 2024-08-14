@@ -54,7 +54,12 @@ export class UsersService {
   async findById(id: string): Promise<User> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['dialogs', 'dialogs.users', 'dialogs.messages'],
+      relations: [
+        'dialogs',
+        'dialogs.users',
+        'dialogs.messages',
+        'dialogs.messages.forwardedMessage',
+      ],
       order: {
         dialogs: {
           updatedAt: 'DESC',
@@ -79,16 +84,13 @@ export class UsersService {
 
       return messageB.getTime() - messageA.getTime();
     });
-
-    user.dialogs = user.dialogs.map((dialog) => {
-      return {
-        ...dialog,
-        messages: dialog.messages.slice(0, 1),
-        unreadedMessages: dialog.messages.filter(
-          (msg) => !msg.readed.includes(id),
-        ).length,
-      };
-    });
+    user.dialogs = user.dialogs.map((dialog) => ({
+      ...dialog,
+      messages: dialog.messages.slice(0, 1),
+      unreadedMessages: dialog.messages.filter(
+        (msg) => !msg.readed?.includes(id),
+      ).length,
+    }));
 
     return user;
   }

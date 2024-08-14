@@ -179,6 +179,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       content,
       sender: senderUser,
       chatId,
+      readed: [sender],
       images: images,
     });
 
@@ -186,7 +187,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const msg = await this.messageRepository.findOne({
       where: { id: savedMessage.id },
-      relations: ['replyMessage'],
+      relations: ['replyMessage', 'forwardedMessage'],
     });
 
     client.emit('message', msg);
