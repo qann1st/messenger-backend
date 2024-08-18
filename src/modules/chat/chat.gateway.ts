@@ -104,16 +104,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       if (!user) return;
 
+      const timestamp = new Date().getTime();
+
       await this.userRepository.update(jwtUser._id, {
         isOnline: false,
-        lastOnline: new Date().getTime(),
+        lastOnline: timestamp,
       });
 
       user.dialogs.forEach(async (el: Chat) => {
         const recipient = el.users.find((id) => id.id !== user.id);
         const userId = await this.redisClient.get(String(recipient.id));
         if (userId) {
-          client.to(userId).emit('offline', el.id, user.lastOnline);
+          client.to(userId).emit('offline', el.id, timestamp);
           client.to(userId).emit('print', {
             roomId: el.id,
             sender: user.id,
@@ -128,6 +130,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async handleMessage(
     client: Socket,
     {
+      id,
       content,
       forwardedMessage,
       recipient,
@@ -139,20 +142,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }: MessageDto,
   ) {
     const sender = await this.redisClient.get(client.id);
-    const recipientSocket = await this.redisClient.get(recipient);
-    const chat = await this.chatRepository.findOne({ where: { id: chatId } });
-    if (!chat) return;
-    const senderUser = await this.userRepository.findOne({
-      where: { id: sender },
-    });
+    const [recipientSocket, chat, senderUser] = await Promise.all([
+      this.redisClient.get(recipient),
+      this.chatRepository.findOne({ where: { id: chatId } }),
+      this.userRepository.findOne({ where: { id: sender } }),
+    ]);
 
-    if (!content && !images && !voiceMessage) return;
-    if (!recipient || !sender) return;
+    if (
+      !chat ||
+      (!content && !images && !voiceMessage) ||
+      !recipient ||
+      !sender
+    )
+      return;
 
     const recipientUser = await this.userRepository.findOne({
       where: { id: recipient },
       relations: ['dialogs'],
     });
+
     if (recipientUser && !recipientUser.dialogs.includes(chat)) {
       recipientUser.dialogs.push(chat);
       await this.userRepository.save(recipientUser);
@@ -167,12 +175,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         size,
       } as MFile);
 
-      const newFiles = await this.uploadService.filterFiles([file]);
+      const [newFiles] = await Promise.all([
+        this.uploadService.filterFiles([file]),
+      ]);
+
       const uploadedFiles = await this.uploadService.uploadFile(newFiles);
       fileUrl = uploadedFiles[0] as string;
     }
 
     const message = this.messageRepository.create({
+      id,
       forwardedMessage,
       voiceMessage: fileUrl,
       replyMessage,
@@ -230,7 +242,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     });
 
-    await this.messageRepository.save(messages);
+    for (const message of messages) {
+      await this.messageRepository.save(message);
+    }
 
     client.to(recipientSocket).emit('read-messages', roomId);
   }

@@ -7,6 +7,8 @@ import {
 } from 'class-validator';
 
 export class MessageDto {
+  @IsString()
+  id: string;
   @Length(0, 1000)
   content?: string;
   @IsHexadecimal()

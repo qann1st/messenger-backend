@@ -82,7 +82,7 @@ export class UsersService {
       if (!messageA) return 1;
       if (!messageB) return -1;
 
-      return messageB.getTime() - messageA.getTime();
+      return messageB - messageA;
     });
     user.dialogs = user.dialogs.map((dialog) => ({
       ...dialog,

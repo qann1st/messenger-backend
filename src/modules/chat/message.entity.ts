@@ -1,12 +1,10 @@
 import {
   Column,
-  CreateDateColumn,
   Entity,
   JoinColumn,
   JoinTable,
   ManyToOne,
   PrimaryGeneratedColumn,
-  UpdateDateColumn,
 } from 'typeorm';
 
 import { ApiProperty } from '@nestjs/swagger';
@@ -42,15 +40,21 @@ export class Message {
   @ApiProperty({ type: String })
   forwardedMessage: string;
 
-  @CreateDateColumn()
-  @ApiProperty({ type: Date })
-  createdAt: Date;
+  @Column({ type: 'bigint', nullable: false })
+  @ApiProperty({
+    type: 'number',
+    description: 'Created timestamp in milliseconds',
+  })
+  createdAt: number;
 
-  @UpdateDateColumn()
-  @ApiProperty({ type: Date })
-  updatedAt: Date;
+  @Column({ type: 'bigint' })
+  @ApiProperty({
+    type: 'number',
+    description: 'Updated timestamp in milliseconds',
+  })
+  updatedAt: number;
 
-  @Column({ type: 'uuid', nullable: false })
+  @Column({ type: 'uuid' })
   @ApiProperty({ type: String })
   @JoinTable()
   chatId: string;
