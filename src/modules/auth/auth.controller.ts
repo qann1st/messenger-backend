@@ -72,6 +72,7 @@ export class AuthController {
       expires: new Date(Date.now() + 900000),
       httpOnly: false,
       secure: true,
+      domain: process.env.DOMAIN,
     });
 
     res.send(tokens);
@@ -93,6 +94,7 @@ export class AuthController {
       expires: new Date(Date.now() + 900000),
       httpOnly: false,
       secure: true,
+      domain: process.env.DOMAIN,
     });
 
     res.send(tokens);
@@ -141,10 +143,12 @@ export class AuthController {
       httpOnly: true,
       secure: true,
     });
+
     res.cookie('at', tokens.accessToken, {
       expires: new Date(Date.now() + 900000),
       httpOnly: false,
       secure: true,
+      domain: process.env.DOMAIN,
     });
 
     res.send(tokens);
