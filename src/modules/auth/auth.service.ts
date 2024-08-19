@@ -187,8 +187,8 @@ export class AuthService {
   async refreshTokens(userId: string, refreshToken: string) {
     const auth = await this.authRepository.findOne({
       where: { user: { id: userId } },
-      relations: ['user'],
     });
+
     if (!auth || !auth.refreshTokens.includes(refreshToken))
       throw new ForbiddenException('Access Denied');
 
