@@ -70,6 +70,7 @@ export class AuthController {
     });
     res.cookie('at', tokens.accessToken, {
       expires: new Date(Date.now() + 900000),
+      httpOnly: false,
       secure: true,
     });
 
@@ -90,6 +91,7 @@ export class AuthController {
     });
     res.cookie('at', tokens.accessToken, {
       expires: new Date(Date.now() + 900000),
+      httpOnly: false,
       secure: true,
     });
 
@@ -141,6 +143,7 @@ export class AuthController {
     });
     res.cookie('at', tokens.accessToken, {
       expires: new Date(Date.now() + 900000),
+      httpOnly: false,
       secure: true,
     });
 
