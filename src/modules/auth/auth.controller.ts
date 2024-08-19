@@ -69,8 +69,7 @@ export class AuthController {
       secure: true,
     });
     res.cookie('at', tokens.accessToken, {
-      expires: new Date(Date.now() + 1296000000),
-      httpOnly: true,
+      expires: new Date(Date.now() + 900000),
       secure: true,
     });
 
@@ -90,8 +89,7 @@ export class AuthController {
       secure: true,
     });
     res.cookie('at', tokens.accessToken, {
-      expires: new Date(Date.now() + 1296000000),
-      httpOnly: true,
+      expires: new Date(Date.now() + 900000),
       secure: true,
     });
 
@@ -109,8 +107,19 @@ export class AuthController {
       },
     },
   })
-  logout(@CurrentUser() payload: JwtRefreshPayload) {
-    return this.authService.logout(payload._id, payload.refreshToken);
+  async logout(
+    @Res() res: Response,
+    @CurrentUser() payload: JwtRefreshPayload,
+  ) {
+    const result = await this.authService.logout(
+      payload._id,
+      payload.refreshToken,
+    );
+
+    res.clearCookie('rt');
+    res.clearCookie('at');
+
+    res.send(result);
   }
 
   @UseGuards(RefreshTokenGuard)
@@ -132,7 +141,6 @@ export class AuthController {
     });
     res.cookie('at', tokens.accessToken, {
       expires: new Date(Date.now() + 900000),
-      httpOnly: true,
       secure: true,
     });
 

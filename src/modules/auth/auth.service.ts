@@ -155,15 +155,21 @@ export class AuthService {
   }
 
   async logout(userId: string, refreshToken: string) {
-    const auth = await this.authRepository.findOne({
+    const authRecord = await this.authRepository.findOne({
       where: { user: { id: userId } },
     });
-    if (!auth) throw new BadRequestException('Auth record not found');
 
-    const updatedTokens = auth.refreshTokens.filter(
+    if (!authRecord) {
+      throw new BadRequestException('Auth record not found');
+    }
+
+    const updatedTokens = authRecord.refreshTokens.filter(
       (token) => token !== refreshToken,
     );
-    await this.authRepository.update(auth.id, { refreshTokens: updatedTokens });
+
+    await this.authRepository.update(authRecord.id, {
+      refreshTokens: updatedTokens,
+    });
 
     return { success: true };
   }
@@ -202,22 +208,20 @@ export class AuthService {
   async updateRefreshToken(userId: string, payload: Payload) {
     const tokens = await this.getTokens(payload);
 
-    let auth = await this.authRepository.findOne({
+    let authRecord = await this.authRepository.findOne({
       where: { user: { id: userId } },
     });
-    if (!auth) {
-      auth = this.authRepository.create({
+
+    if (!authRecord) {
+      authRecord = this.authRepository.create({
         user: { id: userId },
         refreshTokens: [tokens.refreshToken],
       });
     } else {
-      const updatedTokens = auth.refreshTokens.includes(tokens.refreshToken)
-        ? auth.refreshTokens
-        : [...auth.refreshTokens, tokens.refreshToken];
-      await this.authRepository.update(auth.id, {
-        refreshTokens: updatedTokens,
-      });
+      authRecord.refreshTokens.push(tokens.refreshToken);
     }
+
+    await this.authRepository.save(authRecord);
 
     return tokens;
   }

@@ -40,96 +40,100 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private chatService: ChatService,
     private jwtService: JwtService,
   ) {
-    const host = process.env.REDIS_HOST ?? 'localhost';
-    const port = Number(process.env.REDIS_PORT) ?? 32768;
-
     this.redisClient = new Redis({
-      host,
-      port,
+      host: process.env.REDIS_HOST ?? 'localhost',
+      port: Number(process.env.REDIS_PORT) ?? 32768,
       connectionName: 'chat',
     });
   }
 
-  async handleConnection(client: Socket) {
-    try {
-      const token = client.handshake.auth['token'];
-      if (!token) return client.disconnect();
+  private async getUserFromSocket(client: Socket) {
+    const token = client.handshake.auth['token'];
+    if (!token) return null;
 
+    try {
       const jwtUser = await this.jwtService.verifyAsync(token, {
         secret: process.env.JWT_ACCESS_SECRET,
       });
+      return jwtUser?._id ? jwtUser : null;
+    } catch (err) {
+      console.error('Error verifying token:', err);
+      return null;
+    }
+  }
 
-      if (!jwtUser._id) return;
+  private async getUserAndRelations(userId: string) {
+    return this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['dialogs', 'dialogs.users'],
+    });
+  }
 
-      await this.redisClient.set(jwtUser._id, client.id);
-      await this.redisClient.set(client.id, jwtUser._id);
+  private async updateUserStatus(userId: string, isOnline: boolean) {
+    const updateFields = { isOnline };
+    if (!isOnline) {
+      updateFields['lastOnline'] = new Date().getTime();
+    }
+    await this.userRepository.update(userId, updateFields);
+  }
 
-      const user = await this.userRepository.findOne({
-        where: { id: jwtUser._id },
-        relations: ['dialogs', 'dialogs.users'],
-      });
-
-      if (!user) return;
-
-      await this.userRepository.update(jwtUser._id, { isOnline: true });
-
-      user.dialogs.forEach(async (el: Chat) => {
-        const recipient = el.users.find((id) => id.id !== user.id);
-        const userId = await this.redisClient.get(String(recipient.id));
-        if (userId) {
-          client.to(userId).emit('online', el.id);
+  private async notifyDialogUsers(user: User, event: string, data: any) {
+    const userDialogs = user.dialogs ?? [];
+    for (const dialog of userDialogs) {
+      const recipient = dialog.users.find((u) => u.id !== user.id);
+      if (recipient) {
+        const recipientSocket = await this.redisClient.get(
+          String(recipient.id),
+        );
+        if (recipientSocket) {
+          this.server.to(recipientSocket).emit(event, data);
         }
-      });
-    } catch {}
+      }
+    }
+  }
+
+  async handleConnection(client: Socket) {
+    const jwtUser = await this.getUserFromSocket(client);
+    if (!jwtUser) return client.disconnect();
+
+    const userId = jwtUser._id;
+
+    await Promise.all([
+      this.redisClient.set(userId, client.id),
+      this.redisClient.set(client.id, userId),
+    ]);
+
+    const user = await this.getUserAndRelations(userId);
+    if (!user) return;
+
+    await this.updateUserStatus(userId, true);
+    await this.notifyDialogUsers(user, 'online', { userId });
   }
 
   async handleDisconnect(client: Socket) {
-    try {
-      const token = client.handshake.auth['token'];
-      if (!token) return client.disconnect();
+    const jwtUser = await this.getUserFromSocket(client);
+    if (!jwtUser) return;
 
-      const jwtUser = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_ACCESS_SECRET,
-      });
+    const userId = jwtUser._id;
 
-      if (!jwtUser._id) return;
+    await Promise.all([
+      this.redisClient.del(userId),
+      this.redisClient.del(client.id),
+    ]);
 
-      await this.redisClient.del(jwtUser._id);
-      await this.redisClient.del(client.id);
+    const user = await this.getUserAndRelations(userId);
+    if (!user) return;
 
-      const user = await this.userRepository.findOne({
-        where: { id: jwtUser._id },
-        relations: ['dialogs', 'dialogs.users'],
-      });
-
-      if (!user) return;
-
-      const timestamp = new Date().getTime();
-
-      await this.userRepository.update(jwtUser._id, {
-        isOnline: false,
-        lastOnline: timestamp,
-      });
-
-      user.dialogs.forEach(async (el: Chat) => {
-        const recipient = el.users.find((id) => id.id !== user.id);
-        const userId = await this.redisClient.get(String(recipient.id));
-        if (userId) {
-          client.to(userId).emit('offline', el.id, timestamp);
-          client.to(userId).emit('print', {
-            roomId: el.id,
-            sender: user.id,
-            printing: false,
-          });
-        }
-      });
-    } catch {}
+    await this.updateUserStatus(userId, false);
+    await this.notifyDialogUsers(user, 'offline', {
+      userId,
+      lastOnline: new Date().getTime(),
+    });
   }
 
   @SubscribeMessage('message')
-  async handleMessage(
-    client: Socket,
-    {
+  async handleMessage(client: Socket, messageDto: MessageDto) {
+    const {
       id,
       content,
       forwardedMessage,
@@ -139,8 +143,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       images,
       voiceMessage,
       size,
-    }: MessageDto,
-  ) {
+    } = messageDto;
+
     const sender = await this.redisClient.get(client.id);
     const [recipientSocket, chat, senderUser] = await Promise.all([
       this.redisClient.get(recipient),
@@ -160,7 +164,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       where: { id: recipient },
       relations: ['dialogs'],
     });
-
     if (recipientUser && !recipientUser.dialogs.includes(chat)) {
       recipientUser.dialogs.push(chat);
       await this.userRepository.save(recipientUser);
@@ -178,7 +181,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const [newFiles] = await Promise.all([
         this.uploadService.filterFiles([file]),
       ]);
-
       const uploadedFiles = await this.uploadService.uploadFile(newFiles);
       fileUrl = uploadedFiles[0] as string;
     }
@@ -192,11 +194,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       sender: senderUser,
       chatId,
       readed: [sender],
-      images: images,
+      images,
     });
 
     const savedMessage = await this.messageRepository.save(message);
-
     const msg = await this.messageRepository.findOne({
       where: { id: savedMessage.id },
       relations: ['replyMessage', 'forwardedMessage'],
@@ -218,34 +219,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const messages = await this.messageRepository.find({
       where: { chatId: roomId },
-      select: [
-        'chat',
-        'chatId',
-        'content',
-        'createdAt',
-        'forwardedMessage',
-        'id',
-        'images',
-        'isEdited',
-        'readed',
-        'replyMessage',
-        'sender',
-        'updatedAt',
-        'voiceMessage',
-      ],
     });
 
-    messages?.map((el) => {
-      if (!el.readed?.includes(sender)) {
-        if (!el.readed) el.readed = [];
-        el.readed.push(sender);
+    messages.forEach((message) => {
+      if (!message.readed?.includes(sender)) {
+        message.readed = message.readed || [];
+        message.readed.push(sender);
       }
     });
 
-    for (const message of messages) {
-      await this.messageRepository.save(message);
-    }
-
+    await this.messageRepository.save(messages);
     client.to(recipientSocket).emit('read-messages', roomId);
   }
 
@@ -283,9 +266,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!chat) return;
 
     const message = chat.messages.find((msg) => msg.id === messageId);
-
     await this.messageRepository.delete(messageId);
-    chat.messages = chat.messages.filter((message) => message.id !== messageId);
+
+    chat.messages = chat.messages.filter((msg) => msg.id !== messageId);
     await this.chatRepository.save(chat);
 
     client.emit('delete-message', message);
