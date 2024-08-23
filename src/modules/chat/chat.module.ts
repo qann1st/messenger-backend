@@ -5,6 +5,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FirebaseAdminModule } from '~modules/firebase-admin/firebase-admin.module';
 import { UploadService } from '~modules/upload/upload.service';
 import { User } from '~modules/users/users.entity';
+import { UsersService } from '~modules/users/users.service';
 
 import { ChatController } from './chat.controller';
 import { Chat } from './chat.entity';
@@ -19,6 +20,6 @@ import { Message } from './message.entity';
     FirebaseAdminModule,
   ],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway, UploadService],
+  providers: [ChatService, ChatGateway, UploadService, UsersService],
 })
 export class ChatModule {}

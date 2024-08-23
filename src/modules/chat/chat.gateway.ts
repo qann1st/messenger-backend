@@ -15,7 +15,9 @@ import {
 
 import { MFile } from '~modules/upload/mfile.class';
 import { UploadService } from '~modules/upload/upload.service';
+import { UpdateUserDto } from '~modules/users/dto/update-user.dto';
 import { User } from '~modules/users/users.entity';
+import { UsersService } from '~modules/users/users.service';
 
 import { Chat } from './chat.entity';
 import { ChatService } from './chat.service';
@@ -36,6 +38,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @InjectRepository(Chat) private chatRepository: Repository<Chat>,
     @InjectRepository(Message) private messageRepository: Repository<Message>,
     @InjectRepository(User) private userRepository: Repository<User>,
+    private usersService: UsersService,
     private uploadService: UploadService,
     private chatService: ChatService,
     private jwtService: JwtService,
@@ -214,22 +217,51 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     const sender = await this.redisClient.get(client.id);
     const recipientSocket = await this.redisClient.get(recipient);
-    const chat = await this.chatRepository.findOne({ where: { id: roomId } });
+
+    const chat = await this.chatRepository.findOne({
+      where: { id: roomId },
+      relations: ['messages'],
+    });
+
     if (!chat) return;
 
-    const messages = await this.messageRepository.find({
-      where: { chatId: roomId },
-    });
+    const messagesToUpdate = chat.messages
+      .filter((message) => message.chatId === roomId)
+      .map((message) => {
+        if (!message.readed?.includes(sender)) {
+          message.readed = message.readed || [];
+          message.readed.push(sender);
+        }
+        return message;
+      });
 
-    messages.forEach((message) => {
-      if (!message.readed?.includes(sender)) {
+    if (messagesToUpdate.length === 0) return;
+
+    for (const message of messagesToUpdate) {
+      if (
+        message.chatId === roomId &&
+        (!message.readed || !message.readed.includes(sender))
+      ) {
         message.readed = message.readed || [];
-        message.readed.push(sender);
-      }
-    });
+        if (!message.readed.includes(sender)) {
+          message.readed.push(sender);
+        }
 
-    await this.messageRepository.save(messages);
+        await this.messageRepository.save(message);
+      }
+    }
+
     client.to(recipientSocket).emit('read-messages', roomId);
+  }
+
+  @SubscribeMessage('update-user')
+  async updateUser(client: Socket, updateUser: UpdateUserDto) {
+    const sender = await this.redisClient.get(client.id);
+
+    const user = await this.usersService.update(sender, updateUser);
+
+    client.emit('update-user', user);
+    await this.notifyDialogUsers(user, 'update-user', user);
   }
 
   @SubscribeMessage('print')
@@ -259,20 +291,53 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }: { roomId: string; recipient: string; messageId: string },
   ) {
     const recipientSocket = await this.redisClient.get(recipient);
+
     const chat = await this.chatRepository.findOne({
       where: { id: roomId },
-      relations: ['messages'],
+      relations: [
+        'messages',
+        'messages.replyMessage',
+        'messages.forwardedMessage',
+      ],
     });
+
     if (!chat) return;
 
-    const message = chat.messages.find((msg) => msg.id === messageId);
-    await this.messageRepository.delete(messageId);
+    const message = chat.messages.find((msg: any) => msg.id === messageId);
 
-    chat.messages = chat.messages.filter((msg) => msg.id !== messageId);
-    await this.chatRepository.save(chat);
+    if (message) {
+      const messagesToUpdate = chat.messages.filter(
+        (msg: any) =>
+          msg.replyMessage?.id === messageId ||
+          msg.forwardedMessage?.id === messageId,
+      );
 
-    client.emit('delete-message', message);
-    client.to(recipientSocket).emit('delete-message', message);
+      if (messagesToUpdate.length > 0) {
+        await Promise.all(
+          messagesToUpdate.map(async (msg: any) => {
+            try {
+              if (msg.replyMessage?.id === messageId) {
+                msg.replyMessage = null;
+              }
+              if (msg.forwardedMessage?.id === messageId) {
+                msg.forwardedMessage = null;
+              }
+              await this.messageRepository.save(msg);
+            } catch (err) {
+              console.error(err);
+            }
+          }),
+        );
+      }
+
+      await this.messageRepository.delete(messageId);
+
+      chat.messages = chat.messages.filter((msg) => msg.id !== messageId);
+      await this.chatRepository.save(chat);
+
+      client.emit('delete-message', message);
+      client.to(recipientSocket).emit('delete-message', message);
+    }
   }
 
   @SubscribeMessage('edit-message')
