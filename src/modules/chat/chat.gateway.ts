@@ -88,6 +88,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const recipientSocket = await this.redisClient.get(
           String(recipient.id),
         );
+
         if (recipientSocket) {
           this.server.to(recipientSocket).emit(event, data);
         }
@@ -261,7 +262,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const user = await this.usersService.update(sender, updateUser);
 
     client.emit('update-user', user);
-    await this.notifyDialogUsers(user, 'update-user', user);
+    await this.notifyDialogUsers(
+      await this.usersService.findById(sender),
+      'update-user',
+      user,
+    );
   }
 
   @SubscribeMessage('print')
